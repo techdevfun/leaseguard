@@ -1,0 +1,1 @@
+{"allow":["npm test","git status","git diff *","node --test *"],"deny":["rm -rf *","curl * | sh","wget * | sh","* --force *","git push * --force"]}

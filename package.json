@@ -1,0 +1,1 @@
+{"bin":{"leaseguard":"./leaseguard.js"},"description":"Approval leases for agent-run commands — approvals that expire by construction","engines":{"node":">=18"},"license":"MIT","name":"leaseguard","scripts":{"test":"node --test tests/test_leaseguard.js"},"version":"1.0.0"}

@@ -14,5 +14,5 @@ jobs:
       - run: npm test
       - name: demo output matches expected
         run: |
-          ./examples/demo.sh > /tmp/demo-out.txt 2>&1
+          sh examples/demo.sh > /tmp/demo-out.txt 2>&1
           diff examples/expected-output.txt /tmp/demo-out.txt

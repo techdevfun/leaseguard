@@ -1,0 +1,24 @@
+### 1. grant a 3-second lease for the deploy command
+lease <id> granted
+  pattern : echo deploy-*
+  valid   : 3s (until <ts>)
+  scope   : <tmpdir>
+  note    : demo lease
+  token   : <token>
+
+run it with: leaseguard run --lease <token> -- echo deploy-<arg>
+
+### 2. run it right away -> allowed
+deploy-backend
+
+### 3. run it again after the lease expired -> denied
+leaseguard: denied: lease <id> expired at <ts> — ask for a fresh approval
+
+### 4. audit: the stale approval died quietly, nothing ran on it
+leaseguard audit
+  leases : 1 total — 0 active, 0 revoked, 1 expired (used), 0 expired unused
+  runs   : 1 allowed, 1 denied
+  ledger : 3 entries, hash chain OK
+
+  recent denials:
+    [<ts>] lease-expired: echo deploy-backend

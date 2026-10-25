@@ -108,7 +108,7 @@ leaseguard run --policy examples/policy.json -- npm test
 
 ```sh
 leaseguard leases          # active / expired / revoked
-leaseguard revoke 9f2c1a   # kill a lease now (prefix match ok)
+leaseguard revoke 9f2c1a   # kill a lease now (prefix match ok; an ambiguous prefix is refused, not guessed)
 leaseguard audit           # summary + tamper check of the ledger
 leaseguard audit --json    # machine-readable
 ```

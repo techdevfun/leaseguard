@@ -192,3 +192,28 @@ describe("leases listing", () => {
     assert.ok(r.stdout.includes("active"));
   });
 });
+
+describe("revoke", () => {
+  test("refuses an ambiguous prefix instead of revoking the first match", () => {
+    // Craft two leases sharing a prefix: random ids rarely collide, so
+    // seed the store directly rather than hoping for a collision.
+    const store = {
+      leases: [
+        { id: "ab1111111111", pattern: "npm test", grantedAt: 1, expiresAt: 9999999999999, scope: HOME, note: "", revoked: false, usedCount: 0, lastUsedAt: null },
+        { id: "ab2222222222", pattern: "rm -rf dist", grantedAt: 1, expiresAt: 9999999999999, scope: HOME, note: "", revoked: false, usedCount: 0, lastUsedAt: null },
+      ],
+    };
+    fs.writeFileSync(path.join(HOME, "leases.json"), JSON.stringify(store));
+    const r = run(["revoke", "ab"]);
+    assert.equal(r.status, 1);
+    assert.ok(r.stderr.includes("ambiguous"));
+    assert.ok(r.stderr.includes("ab1111111111"));
+    assert.ok(r.stderr.includes("ab2222222222"));
+    const after = JSON.parse(fs.readFileSync(path.join(HOME, "leases.json"), "utf8"));
+    assert.ok(after.leases.every(l => !l.revoked), "no lease may be revoked on an ambiguous prefix");
+    // A longer, unambiguous prefix still works.
+    const ok = run(["revoke", "ab1"]);
+    assert.equal(ok.status, 0);
+    assert.ok(ok.stdout.includes("ab1111111111"));
+  });
+});

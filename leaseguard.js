@@ -340,8 +340,15 @@ function cmdRevoke(argv) {
   const id = (argv[0] || "").trim();
   if (!id) die(1, "usage: leaseguard revoke <lease-id>");
   const store = loadLeases();
-  const rec = store.leases.find(l => l.id === id || l.id.startsWith(id));
-  if (!rec) die(1, `no lease ${id}`);
+  const matches = store.leases.filter(l => l.id === id || l.id.startsWith(id));
+  if (!matches.length) die(1, `no lease ${id}`);
+  if (matches.length > 1) {
+    // A short prefix that matches several leases must never silently
+    // revoke the first one — the user may have meant any of them.
+    const list = matches.map(l => `  ${l.id}  "${l.pattern}"`).join("\n");
+    die(1, `ambiguous prefix "${id}" matches ${matches.length} leases — use a longer prefix or the full id:\n${list}`);
+  }
+  const rec = matches[0];
   rec.revoked = true;
   saveLeases(store);
   ledgerAppend({ event: "revoke", leaseId: rec.id });

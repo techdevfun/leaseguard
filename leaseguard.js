@@ -122,8 +122,14 @@ function withinScope(scope, cwd) {
 function loadLeases() {
   ensureHome();
   if (!fs.existsSync(LEASES_FILE)) return { leases: [] };
-  try { return JSON.parse(fs.readFileSync(LEASES_FILE, "utf8")); }
-  catch (_) { return { leases: [] }; }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(LEASES_FILE, "utf8"));
+    const leases = parsed && parsed.leases;
+    // A hand-edited or damaged store must never crash the CLI with a
+    // stack trace — drop what we don't recognize and carry on.
+    if (Array.isArray(leases)) return { leases: leases.filter(l => l && typeof l.id === "string") };
+  } catch (_) { /* fall through to an empty store */ }
+  return { leases: [] };
 }
 
 function saveLeases(store) {

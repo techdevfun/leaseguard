@@ -193,6 +193,33 @@ describe("leases listing", () => {
   });
 });
 
+describe("damaged lease store", () => {
+  test("grant recovers instead of crashing on a malformed store", () => {
+    fs.writeFileSync(path.join(HOME, "leases.json"), '{"leases": "junk", "extra": true}');
+    const { token, id } = grant("echo *", ["--for", "10m"]);
+    assert.ok(token.includes("."));
+    const r = run(["leases"]);
+    assert.equal(r.status, 0);
+    assert.ok(r.stdout.includes(id));
+    assert.ok(r.stdout.includes("active"));
+  });
+
+  test("garbage entries are ignored, valid ones keep working", () => {
+    const store = { leases: [null, "junk", { id: 42 }, {
+      id: "good01", pattern: "echo *", grantedAt: 1, expiresAt: 9999999999999,
+      scope: HOME, note: "", revoked: false, usedCount: 0, lastUsedAt: null,
+    }] };
+    fs.writeFileSync(path.join(HOME, "leases.json"), JSON.stringify(store));
+    const r = run(["leases"]);
+    assert.equal(r.status, 0);
+    assert.ok(r.stdout.includes("good01"));
+    assert.ok(!r.stdout.includes("junk"));
+    const rev = run(["revoke", "good01"]);
+    assert.equal(rev.status, 0);
+    assert.ok(rev.stdout.includes("good01"));
+  });
+});
+
 describe("revoke", () => {
   test("refuses an ambiguous prefix instead of revoking the first match", () => {
     // Craft two leases sharing a prefix: random ids rarely collide, so

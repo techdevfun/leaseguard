@@ -69,7 +69,7 @@ Verify it works:
 
 ```sh
 leaseguard help
-npm test   # 21 tests, ~7 seconds
+npm test   # 24 tests, ~7 seconds
 ```
 
 ## Usage

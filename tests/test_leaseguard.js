@@ -220,6 +220,48 @@ describe("damaged lease store", () => {
   });
 });
 
+describe("damaged ledger", () => {
+  test("grant keeps working when the ledger's last line is garbage", () => {
+    const { id } = grant("echo *", ["--for", "10m"]);
+    const ledger = path.join(HOME, "ledger.jsonl");
+    fs.appendFileSync(ledger, "not-json{{{garbage\n");
+    // Must not crash with a stack trace — chain from the last good entry.
+    const again = grant("echo *", ["--for", "10m"]);
+    assert.ok(again.token.includes("."));
+    const lines = fs.readFileSync(ledger, "utf8").split("\n").filter(Boolean);
+    assert.equal(lines.length, 3);
+    const lastGood = JSON.parse(lines[2]);
+    assert.equal(lastGood.seq, 1);
+    assert.equal(lastGood.prev, JSON.parse(lines[0]).hash);
+    const listed = run(["leases"]);
+    assert.equal(listed.status, 0);
+    assert.ok(listed.stdout.includes(id));
+    assert.ok(listed.stdout.includes(again.id));
+  });
+
+  test("grant recovers when the whole ledger is unreadable", () => {
+    const ledger = path.join(HOME, "ledger.jsonl");
+    fs.writeFileSync(ledger, "garbage line one\ngarbage line two\n");
+    const { token, id } = grant("echo *", ["--for", "10m"]);
+    assert.ok(token.includes("."));
+    const r = run(["leases"]);
+    assert.equal(r.status, 0);
+    assert.ok(r.stdout.includes(id));
+  });
+
+  test("audit reports a broken chain instead of crashing on a garbage line", () => {
+    grant("echo *", ["--for", "10m"]);
+    const ledger = path.join(HOME, "ledger.jsonl");
+    fs.appendFileSync(ledger, "not-json{{{garbage\n");
+    const r = run(["audit"]);
+    assert.equal(r.status, 0);
+    assert.ok(r.stdout.includes("BROKEN"));
+    const j = run(["audit", "--json"]);
+    assert.equal(j.status, 0);
+    assert.equal(JSON.parse(j.stdout).ledger.chainOk, false);
+  });
+});
+
 describe("revoke", () => {
   test("refuses an ambiguous prefix instead of revoking the first match", () => {
     // Craft two leases sharing a prefix: random ids rarely collide, so

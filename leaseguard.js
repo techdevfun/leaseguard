@@ -146,9 +146,19 @@ function ledgerAppend(event) {
   let prev = "GENESIS", seq = 0;
   if (fs.existsSync(LEDGER_FILE)) {
     const lines = fs.readFileSync(LEDGER_FILE, "utf8").split("\n").filter(Boolean);
-    if (lines.length) {
-      const last = JSON.parse(lines[lines.length - 1]);
-      prev = last.hash; seq = last.seq + 1;
+    // Chain from the last readable entry. A damaged trailing line (disk
+    // error, hand edit, partial write) must never brick every command
+    // with a stack trace — same rule as the lease store. Tampering stays
+    // detectable: ledgerVerify still flags the unreadable line.
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const last = JSON.parse(lines[i]);
+        if (last && typeof last.hash === "string") {
+          prev = last.hash;
+          seq = Number.isInteger(last.seq) ? last.seq + 1 : 0;
+          break;
+        }
+      } catch (_) { /* keep scanning backwards for a readable entry */ }
     }
   }
   const entry = { seq, ts: new Date().toISOString(), prev, ...event };
@@ -174,7 +184,13 @@ function ledgerVerify() {
 
 function ledgerRead() {
   if (!fs.existsSync(LEDGER_FILE)) return [];
-  return fs.readFileSync(LEDGER_FILE, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
+  const out = [];
+  for (const l of fs.readFileSync(LEDGER_FILE, "utf8").split("\n").filter(Boolean)) {
+    // Skip unreadable lines instead of crashing: audit's job is to report
+    // a broken chain (ledgerVerify flags the bad line), not to die on it.
+    try { out.push(JSON.parse(l)); } catch (_) { /* reported by ledgerVerify */ }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

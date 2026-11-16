@@ -336,6 +336,15 @@ function cmdRun(argv) {
   // exact approved command is what runs. Need pipes? run sh -c explicitly
   // and make the pattern/policy match the full "sh -c ..." string.
   const res = spawnSync(cmdArgv[0], cmdArgv.slice(1), { stdio: "inherit" });
+  if (res.error) {
+    // The gate allowed it, but nothing ran: spawn failed (command not
+    // found, not executable, ...). That is neither an allowed run nor a
+    // use of the lease — say so, log it as an error, and leave usedCount
+    // alone. Previously this fell through as outcome "allowed" with
+    // exitCode 1 and burned one lease use, with no diagnostic at all.
+    ledgerAppend({ event: "run", outcome: "error", by: allowedBy, command: cmdStr, cwd, detail: res.error.message });
+    die(1, `cannot execute "${cmdArgv[0]}": ${res.error.message}`);
+  }
   const exitCode = res.status === null ? 1 : res.status;
   if (leaseRecord) {
     const store = loadLeases();

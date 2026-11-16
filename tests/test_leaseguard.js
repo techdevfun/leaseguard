@@ -120,6 +120,34 @@ describe("run with lease", () => {
     assert.equal(r.status, 0);
     assert.ok(r.stdout.includes("env-ok"));
   });
+
+  test("a command that cannot spawn is an error, not an allowed run", () => {
+    // Regression: spawnSync failure (ENOENT) used to fall through as
+    // outcome "allowed" with exitCode 1, silently burn one lease use,
+    // and print no diagnostic at all.
+    const { token, id } = grant("nosuchcmd-xyz *", ["--for", "10m"]);
+    const r = run(["run", "--lease", token, "--", "nosuchcmd-xyz", "arg1"], { cwd: HOME });
+    assert.equal(r.status, 1);
+    assert.ok(r.stderr.includes("cannot execute"), r.stderr);
+    assert.ok(r.stderr.includes("nosuchcmd-xyz"));
+    // The lease was never actually used.
+    const listed = run(["leases"]);
+    assert.ok(listed.stdout.includes(`${id}  [active]`));
+    assert.ok(listed.stdout.includes("used=0x"), listed.stdout);
+    // The ledger must not claim an allowed run, and audit must agree.
+    const entries = fs.readFileSync(path.join(HOME, "ledger.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
+    const last = entries[entries.length - 1];
+    assert.equal(last.event, "run");
+    assert.equal(last.outcome, "error");
+    assert.ok(last.detail.includes("ENOENT"), last.detail);
+    const audit = JSON.parse(run(["audit", "--json"]).stdout);
+    assert.equal(audit.runs.allowed, 0);
+    assert.equal(audit.ledger.chainOk, true);
+    // And a lease is still usable afterwards for a real command.
+    const second = grant("echo *", ["--for", "10m"]);
+    const ok = run(["run", "--lease", second.token, "--", "echo", "still-good"], { cwd: HOME });
+    assert.equal(ok.status, 0);
+  });
 });
 
 describe("policy", () => {
@@ -147,6 +175,18 @@ describe("policy", () => {
     const f = writePolicy({ allow: ["npm test"], deny: [] });
     const r = run(["run", "--policy", f, "--", "rm", "-rf", "dist"], { cwd: HOME });
     assert.equal(r.status, 2);
+  });
+
+  test("a policy-allowed command that cannot spawn is an error, not allowed", () => {
+    // Same spawn-failure bug on the policy path (no lease involved):
+    // must not be logged as an allowed run.
+    const f = writePolicy({ allow: ["nosuchcmd-xyz *"], deny: [] });
+    const r = run(["run", "--policy", f, "--", "nosuchcmd-xyz", "arg1"], { cwd: HOME });
+    assert.equal(r.status, 1);
+    assert.ok(r.stderr.includes("cannot execute"), r.stderr);
+    const audit = JSON.parse(run(["audit", "--json"]).stdout);
+    assert.equal(audit.runs.allowed, 0);
+    assert.equal(audit.ledger.chainOk, true);
   });
 });
 
